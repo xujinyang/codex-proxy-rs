@@ -57,7 +57,7 @@ async fn cyber_policy_session_exclusion_has_actionable_non_retryable_error() {
         .await
         .err()
         .expect("excluded session must fail before upstream");
-    assert_eq!(error.kind(), ProviderErrorKind::InvalidRequest);
+    assert_eq!(error.kind(), ProviderErrorKind::SessionPolicyRestricted);
     assert!(error.retry_is_prohibited());
     let visible = error
         .client_visible_upstream_error()
@@ -91,7 +91,7 @@ async fn cyber_policy_session_exclusion_has_actionable_non_retryable_error() {
         .await
         .err()
         .unwrap();
-    assert_eq!(error.kind(), ProviderErrorKind::InvalidRequest);
+    assert_eq!(error.kind(), ProviderErrorKind::SessionPolicyRestricted);
     assert!(error.retry_is_prohibited());
     assert_eq!(
         error.client_visible_upstream_error().unwrap().code(),
@@ -202,7 +202,7 @@ async fn final_middleware_session_header_cannot_use_another_sessions_account() {
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 
-fn turn_request(session: &str, turn: &str) -> Operation {
+pub(super) fn turn_request(session: &str, turn: &str) -> Operation {
     Operation::Generate(GenerateRequest::from_protocol_payload(
         ProtocolPayload::json_object("openai", json!({
             "model":"gpt-5.4", "input":"hello",

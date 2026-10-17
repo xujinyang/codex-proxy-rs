@@ -651,7 +651,7 @@ async fn upstream_message_too_big_returns_actionable_http_error() {
 async fn session_policy_rejection_returns_bad_request_with_the_policy_code() {
     let error = EngineError::Provider(
         ProviderError::new(
-            ProviderErrorKind::InvalidRequest,
+            ProviderErrorKind::SessionPolicyRestricted,
             UpstreamSendState::NotSent,
         )
         .with_retry_prohibited()

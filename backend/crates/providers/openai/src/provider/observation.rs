@@ -844,7 +844,7 @@ fn selection_failure(error: &CredentialSelectionError) -> ProviderError {
             }
         }
         CredentialSelectionError::SessionPolicyRestricted => provider_error(
-            ProviderErrorKind::InvalidRequest,
+            ProviderErrorKind::SessionPolicyRestricted,
             UpstreamSendState::NotSent,
         )
         .with_retry_prohibited()

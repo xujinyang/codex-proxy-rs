@@ -917,25 +917,22 @@ impl CodexCredentialSelector {
                         })
                     } else if quota_exhausted {
                         Err(CredentialSelectionError::QuotaExhausted)
-                    } else if !candidates.is_empty()
-                        && cyber_policy_scope
-                            .as_ref()
-                            .and_then(|scope| scope.state.as_ref())
-                            .is_some_and(|state| {
-                                let mut effective = candidates.iter().filter(|candidate| {
-                                    pinned_account
-                                        .as_ref()
-                                        .is_none_or(|id| candidate.account.id() == id)
-                                });
-                                effective.next().is_some_and(|first| {
-                                    state.excluded_accounts().contains(first.account.id())
-                                        && effective.all(|candidate| {
-                                            state
-                                                .excluded_accounts()
-                                                .contains(candidate.account.id())
-                                        })
-                                })
+                    } else if cyber_policy_scope
+                        .as_ref()
+                        .and_then(|scope| scope.state.as_ref())
+                        .is_some_and(|state| {
+                            let mut effective = candidates.iter().filter(|candidate| {
+                                pinned_account
+                                    .as_ref()
+                                    .is_none_or(|id| candidate.account.id() == id)
+                            });
+                            effective.next().is_some_and(|first| {
+                                state.excluded_accounts().contains(first.account.id())
+                                    && effective.all(|candidate| {
+                                        state.excluded_accounts().contains(candidate.account.id())
+                                    })
                             })
+                        })
                     {
                         // 仅明确的会话策略排除使用此分类，空池、传输和容量失败保持原分类
                         Err(CredentialSelectionError::SessionPolicyRestricted)

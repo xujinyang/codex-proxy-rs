@@ -139,7 +139,7 @@ Provider 不支持刷新（如 OpenAI URL + Key 账号）返回 `invalid_input`�
 
 声明 `maintenance` 并注册 `methods::RECONCILE`，宿主会在实例启用发布、进程恢复及配置变更后调用
 `plugin.reconcile`，并每 30 秒补偿一次。处理器必须幂等；调用可能重复，配置通知会合并，不表示逐条账号事件。
-每个实例串行执行，不同实例相互独立；调用限时 30 秒，失败后等待 5 秒重试。维护失败不回滚已经提交的资源，
+每个实例串行执行，不同实例相互独立；调用限时 30 秒，返回值不消费，调用失败后等待 5 秒重试。维护失败不回滚已经提交的资源，
 下一次对账继续补齐。只读校验、准备候选与 CLI 帮助不会启动维护；停用、替换和宿主关闭时取消旧任务
 
 维护与其他处理器共用以下资源方法：
@@ -444,9 +444,9 @@ restore_and_validate_response(response).await
 ### 模型目录
 
 `model_catalog` v1 在 registration 阶段一次提交 `ModelCatalogRegistration { models: Vec<ModelAlias> }`，不需要请求级 binding。
-每条 `ModelAlias { id, provider, model }` 定义公开 ID、内置 Provider（`openai` 或 `xai`）及直接上游目标。
-上游目标须已存在于该 Provider 的当前目录；同名原生模型、静态映射、其他插件条目、别名链和循环均拒绝发布。
-每实例最多 256 条，整个二进制 JSON 最多 64 KiB；不允许覆盖原生元数据或自行宣称目标不支持的功能
+每条 `ModelAlias { id, provider, model }` 定义公开 ID、Provider 及直接上游目标，条目正确性由插件负责。
+每实例最多 256 条，整个二进制 JSON 最多 64 KiB；条目重复、目标不存在或 Provider 未注册不阻止宿主快照发布。
+请求按发布顺序取首个匹配条目，插件别名优先于静态映射，目标直接用于上游选路，不递归展开别名或目标上的静态映射
 
 ```rust,ignore
 use gateway_plugin_sdk::call::catalog::{ModelAlias, ModelCatalogRegistration};
@@ -458,7 +458,7 @@ let plugin = PluginBuilder::from_json(include_bytes!("../plugin.json"))?
 ```
 
 有效目录、路由和目标能力随同一个不可变快照发布，`/v1/models`、详情、原生目录和 `host.models.list` 共用该事实及现有 Key／账号模型范围。
-原生别名继承目标的完整可公开对象；更新失败保留旧快照，禁用后新请求不再使用该别名，在途请求持有旧代次。
+目标存在时，别名复用目标的可公开对象；禁用后新请求不再使用该别名，在途请求持有旧代次。
 v1 是直接别名，动态选择可组合 `model_router`；实际路由仍须通过宿主的权限和能力校验，不提供多目标虚拟模型注册合同
 
 ### 重试决策
@@ -467,7 +467,7 @@ v1 是直接别名，动态选择可组合 `model_router`；实际路由仍须�
 输入包含失败分类、必要状态码、发送状态、attempt 序号、Provider／上游模型、剩余路由次数和期限，以及 `allowed_actions`。
 不发送账号凭据、请求正文或上游错误转储。路由次数不等同于 Provider 自有传输恢复预算
 
-返回 `RetryDecision::Delegate`、`Stop` 或 `Retry`。`Retry` 必须出现在宿主允许动作中，并且仅继续宿主已经选定的恢复路径；
+返回 `RetryDecision::Delegate`、`Stop` 或 `Retry`。Core 仅在允许动作包含 `Retry` 时继续已经选定的恢复路径；
 不能指定账号、延迟、目标或提高预算。响应已交付、发送不明确、外部副作用及续接绑定等既有安全门不可绕过。
 Core 处理建立响应流前与流中的失败，并在策略返回后再次检查期限、取消和副作用
 
@@ -483,8 +483,8 @@ let plugin = PluginBuilder::from_json(include_bytes!("../plugin.json"))?
     .build()?;
 ```
 
-按 binding 顺序、插件 ID、实例 ID 确定委托链，首个合法非委托结果生效。整条链最多等待 2 秒，并受请求剩余期限约束。
-退出、超时、未知字段及不允许的动作委托后续处理，最终回到宿主决定；故障不改写原始上游错误。
+按 binding 顺序、插件 ID、实例 ID 确定委托链，首个非委托决定交给 Core 处理。整条链最多等待 2 秒，并受请求剩余期限约束。
+退出、超时或无法解码的决定委托后续处理，最终回到宿主决定；额外字段忽略，故障不改写原始上游错误。
 middleware 的 `next` 最多调用一次，重试与额外模型执行通过独立调用创建
 
 ### 路由、调度与观察
@@ -621,5 +621,5 @@ observer 也按常规计划执行；它不是插件执行期间的嵌套 `host.m
 ## 数据面入口认证
 
 `frontend_auth.identifier` 返回稳定认证器标识；`frontend_auth.authenticate` 接收敏感的 Authorization 载荷并返回
-外部 principal。插件不能指定 Client Key，宿主根据当前入口配置完成映射，并继续检查 Key 的启用状态、模型规则、
+外部 principal。宿主忽略结果中的额外字段，包括附带的 `client_key_id`，只根据当前入口配置完成映射，并继续检查 Key 的启用状态、模型规则、
 账号组、并发和预算。该能力只处理数据面身份，不接管管理端登录

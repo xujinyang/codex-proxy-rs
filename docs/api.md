@@ -447,7 +447,8 @@ Images 固定使用 OpenAI Provider，不重建正文或映射模型字段；Pro
 Images 排除已知为 Free 套餐的 OAuth 账号；套餐缺失或未知时不推断为 Free，API Key 账号不套用该套餐规则。
 其余账号仍需满足模型限制、额度等调度条件，实际生图权限由上游决定
 
-`/v1/alpha/search` 使用相同的 OpenAI Provider 原生端点边界：body（包括 `model`）不解析、不映射，
+`/v1/alpha/search` 使用相同的 OpenAI Provider 原生端点边界：正文原样转发，模型不映射，
+Provider 旁路读取请求中的 `model`，按[账号模型限制](#账号模型限制)选号。
 `x-codex-turn-metadata` 在移除客户端账号身份并按当前 lease 重写 installation ID 后转发；上游账号
 Authorization、Cookie、account ID、originator 和 User-Agent 均由代理安全重建。
 Images 与 Search 保留通过现有过滤规则的普通业务请求头及多值字节；Responses 原连接的 turn state
@@ -795,11 +796,12 @@ Pro 使用 `all` 时也能参与 luna 调度。套餐名称不自动生成或修
 批量接口的调度、分组、模型与代理字段均可省略；省略的字段保持各账号原值。
 提供 `groupIds` 时替换完整分组集合，提供 `concurrencyLimit: null` 时恢复继承运行参数
 
-限制适用于 Responses HTTP、WebSocket 及其带压缩触发的请求，以及 Images 生图与编辑选号，包括重试、亲和和换号；没有合规账号时沿用
+限制适用于 Responses HTTP、WebSocket 及其带压缩触发的请求，以及 Images 生图、编辑与独立 Search 选号，包括重试、亲和和换号；没有合规账号时沿用
 无可用账号错误，不会回退到被禁止的账号。已开始请求使用冻结的政策，新请求使用已发布的新配置。
-Images 按请求正文的图片模型 ID 检查，不依赖文本模型目录；可手动添加目录未列出的图片模型 ID。
-图片模型缺失、重复或无法识别时，仅使用模型政策为 `all` 的账号，不推测上游默认模型。
-独立 Search 及管理员连接测试不受该模型限制；连接测试成功只证明指定账号的上游能力。
+Images 和 Search 按原始请求正文的模型 ID 检查，不依赖模型目录或全局模型映射；可手动添加目录未列出的模型 ID。
+模型缺失、重复或无法识别时，仅使用模型政策为 `all` 的账号，不推测上游默认模型。
+Search 的选号限制不约束插件在选号后主动改写正文。
+管理员连接测试不受该模型限制；连接测试成功只证明指定账号的上游能力。
 普通 `/v1/models` 和单模型查询将已发现的 OpenAI 模型关联到来源账号，至少一个来源账号在当前 Key 范围内且政策允许时才展示；
 同 Provider 中未发现该模型的 `all` 账号不会使它进入列表。原生目录保留已有来源选择和完整模型对象
 
